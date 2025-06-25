@@ -12,11 +12,11 @@
 
 #include <stdio.h>
 
-int main()
+void main()
 {
-    // Input
-    unsigned char vet[] = { 0xBC,0xFF,0x01 };	// Sequenza di bit
-        unsigned short int len = 18;				// Lunghezza (in bit) della sequenza
+	// Input
+	unsigned char vet[] = { 0xBC,0xFF,0x01 };	// Sequenza di bit
+	unsigned short int len = 18;				// Lunghezza (in bit) della sequenza
 
 	// Output
 	short int minLung;		// Lunghezza minima sotto-sequenza di 0
@@ -24,98 +24,99 @@ int main()
 
 	__asm
 	{
-    // Inizializza contatori e flag
-    MOV EAX, 0            // EAX = contatore corrente di zeri
-    MOV BX, -1            // BX = minLung  (-1 = nessuna sequenza trovata)
-    MOV DX, -1            // DX = maxLung  (-1 = nessuna sequenza trovata)
+    // Inizializzazione: imposta minLung e maxLung a -1 (nessuna sequenza trovata)
+    MOV  WORD PTR [minLung], -1    // minLung = -1
+    MOV  WORD PTR [maxLung], -1    // maxLung = -1
 
-    XOR ESI, ESI          // ESI = indice bit corrente (da 0 a len-1)
-    MOV CX, len           // CX = numero totale di bit
+    // CX = indice del bit corrente (i), BX = lunghezza corrente sequenza di zeri
+    XOR  CX, CX                    // CX = 0 (inizia dal primo bit)
+    XOR  BX, BX                    // BX = 0 (nessuna sequenza di zeri attiva)
 
-scorri_bit:
-    // Controlla se abbiamo processato tutti i bit
-    CMP ESI, ECX
-    JGE fine_loop
+ciclo_iniziale:
+    // Verifica se abbiamo analizzato tutti i bit
+    CMP  CX, [len]                 // confronta indice corrente con lunghezza totale
+    JAE  fine                      // se i >= len, termina il ciclo
 
-    // Calcola byte_index = ESI / 8 e carica vet[byte_index]
-    MOV EAX, ESI
-    SHR EAX, 3
-    MOV BL, [vet + EAX]
+    // Estrae il bit i-esimo usando modalità LSB-first:
+    // 1. Calcola byteIndex = i / 8 (i >> 3)
+    // 2. Calcola bitPos = i % 8 (i & 7)
+    // 3. Carica il byte e estrae il bit
+    PUSH CX                        // salva CX per calcolo byteIndex
+    SHR  CX, 3                     // CX = i / 8 (indice del byte)
+    MOV  DL, [vet + CX]           // DL = byte contenente il bit
+    POP  CX                        // ripristina CX (indice bit originale)
+    AND  CX, 7                     // CX = i % 8 (posizione bit nel byte)
+    MOV  AL, DL                    // AL = byte da analizzare
+    SHR  AL, CL                    // sposta bit desiderato in posizione LSB
+    AND  AL, 1                     // isola solo il bit di interesse
 
-    // Calcola offset LSB-first nel byte: offset = ESI mod 8
-    MOV EAX, ESI
-    AND EAX, 7            // EAX = ESI % 8
-    MOV CL, AL            // CL = offset
+    // Analizza il valore del bit estratto
+    CMP  AL, 0                     // verifica se il bit è 0
+    JNE  bit_uno                   // se bit = 1, gestisci fine sequenza
 
-    // Estrai il bit: (vet[byte] >> offset) & 1
-    MOV AL, BL
-    SHR AL, CL
-    AND AL, 1
+    // Il bit è 0: incrementa contatore sequenza di zeri
+    INC  BX                        // BX++ (aumenta lunghezza sequenza)
+    JMP  incrementa_i              // passa al bit successivo
 
-    // Se bit = 0, aumenta contatore zeri
-    CMP AL, 0
-    JNE gestisci_1
-    INC EAX               // contatore++
-    JMP prossimo_bit
+bit_uno:
+    // Il bit è 1: potenziale fine di una sequenza di zeri
+    CMP  BX, 0                     // verifica se c'era una sequenza attiva
+    JLE  incrementa_i              // se BX <= 0, nessuna sequenza da chiudere
 
-gestisci_1:
-    // Se contatore >0, chiude una sequenza di zeri
-    CMP EAX, 0
-    JE prossimo_bit
-
-    // Se prima sequenza (BX==-1), inizializza min/max
-    CMP BX, -1
-    JE primo_init
-    // Altrimenti aggiorna minimo se EAX < BX
-    CMP AX, BX
-    JGE salta_min
-    MOV BX, AX
+    // Aggiorna minLung se necessario
+    MOV  AX, [minLung]             // AX = valore corrente di minLung
+    CMP  AX, -1                    // verifica se minLung è ancora non inizializzato
+    JE   imposta_min               // se sì, imposta direttamente
+    CMP  BX, AX                    // confronta lunghezza corrente con minimo
+    JGE  salta_min                 // se BX >= minLung, non aggiornare
+imposta_min:
+    MOV  [minLung], BX             // minLung = BX (nuovo minimo)
 salta_min:
-    // Aggiorna massimo se EAX > DX
-    CMP AX, DX
-    JLE salta_max
-    MOV DX, AX
-salta_max:
-    MOV EAX, 0            // reset contatore zeri
-    JMP prossimo_bit
 
-primo_init:
-    MOV BX, AX            // primo minLung = AX
-    MOV DX, AX            // primo maxLung = AX
-    MOV EAX, 0            // reset contatore
-    JMP prossimo_bit
+    // Aggiorna maxLung se necessario
+    MOV  DX, [maxLung]             // DX = valore corrente di maxLung
+    CMP  DX, -1                    // verifica se maxLung è ancora non inizializzato
+    JE   imposta_max               // se sì, imposta direttamente
+    CMP  BX, DX                    // confronta lunghezza corrente con massimo
+    JLE  reset_corrente            // se BX <= maxLung, non aggiornare
+imposta_max:
+    MOV  [maxLung], BX             // maxLung = BX (nuovo massimo)
 
-prossimo_bit:
-    INC ESI               // passa al bit successivo
-    JMP scorri_bit
+reset_corrente:
+    XOR  BX, BX                    // azzera contatore per prossima sequenza
 
-fine_loop:
-    // Gestisce eventuale sequenza aperta a fine vettore
-    CMP EAX, 0
-    JE prepara_output
-    // stessa logica di chiusura di sopra
-    CMP BX, -1
-    JE primo_init_end
-    CMP AX, BX
-    JGE salta_min2
-    MOV BX, AX
-salta_min2:
-    CMP AX, DX
-    JLE salta_max2
-    MOV DX, AX
-salta_max2:
+incrementa_i:
+    INC  CX                        // passa al bit successivo
+    JMP  ciclo_iniziale            // continua il ciclo
 
-primo_init_end:
-    MOV BX, AX            // imposta min/max all'ultima sequenza
+fine:
+    // Gestisce eventuale sequenza di zeri che termina a fine array
+    CMP  BX, 0                     // verifica se c'è una sequenza aperta
+    JLE  fine_elaborazione         // se no, termina
 
-prepara_output:
-    MOV minLung, BX       // minLung = BX
-    MOV maxLung, DX       // maxLung = DX
-	}
+    // Aggiorna minLung per l'ultima sequenza
+    MOV  AX, [minLung]             // AX = minLung corrente
+    CMP  AX, -1                    // se non ancora inizializzato
+    JE   imposta_min2              // imposta direttamente
+    CMP  BX, AX                    // confronta con minimo corrente
+    JGE  fine_min                  // se BX >= minLung, non aggiornare
+imposta_min2:
+    MOV  [minLung], BX             // aggiorna minLung
+fine_min:
 
-	// Stampa su video
-    printf("Lunghezza minima delle sotto-sequenze di 0: %d\n", minLung);
-    printf("Lunghezza massima delle sotto-sequenze di 0: %d\n", maxLung);
-    return 0;
+    // Aggiorna maxLung per l'ultima sequenza
+    MOV  DX, [maxLung]             // DX = maxLung corrente
+    CMP  DX, -1                    // se non ancora inizializzato
+    JE   imposta_max2              // imposta direttamente
+    CMP  BX, DX                    // confronta con massimo corrente
+    JLE  fine_elaborazione         // se BX <= maxLung, termina
+imposta_max2:
+    MOV  [maxLung], BX             // aggiorna maxLung
+
+fine_elaborazione:
+
 }
-
+	// Stampa su video
+	printf("Lunghezza minima delle sotto-sequenze di 0: %d\n", minLung);
+	printf("Lunghezza massima delle sotto-sequenze di 0: %d\n", maxLung);
+}

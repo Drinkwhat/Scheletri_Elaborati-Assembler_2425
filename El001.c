@@ -23,48 +23,49 @@ void main()
 
 	// Output
 	char risultato[1024];
+
 	__asm
 	{
-		LEA ESI, testo          // ESI = puntatore al testo
-		LEA EDI, risultato      // EDI = puntatore al risultato
-		LEA EBX, chiave         // EBX = puntatore alla chiave
-		MOV EDX, EBX            // EDX = puntatore corrente nella chiave
-		XOR ECX, ECX            // ECX = contatore 
+		lea esi, testo          // ESI = puntatore al testo
+		lea edi, risultato      // EDI = puntatore al risultato
+		lea ebx, chiave         // EBX = puntatore alla chiave
+		mov edx, ebx            // EDX = puntatore corrente nella chiave
+		xor ecx, ecx            // ECX = contatore (non necessario, ma per chiarezza)
 
 	ciclo_principale:
-		MOV AL, [ESI]           // Carica carattere corrente del testo
-		TEST AL, AL             // Controlla se è il carattere terminatore (0)
-		JZ fine                 // Se sì, termina
+		mov al, [esi]           // Carica carattere corrente del testo
+		test al, al             // Controlla se è il carattere terminatore (0)
+		jz fine                 // Se sì, termina
 
-		MOV AH, [EDX]           // Carica carattere corrente della chiave
-		TEST AH, AH             // Controlla se siamo alla fine della chiave
-		JNZ usa_carattere       // Se no, usa il carattere
+		mov ah, [edx]           // Carica carattere corrente della chiave
+		test ah, ah             // Controlla se siamo alla fine della chiave
+		jnz usa_carattere       // Se no, usa il carattere
 		
 		// Se siamo alla fine della chiave, ricomincia dall'inizio
-		MOV EDX, EBX            // Ripristina EDX all'inizio della chiave
-		MOV AH, [EDX]           // Carica il primo carattere della chiave
+		mov edx, ebx            // Ripristina EDX all'inizio della chiave
+		mov ah, [edx]           // Carica il primo carattere della chiave
 
 	usa_carattere:
-		CMP decifra, 0          // Controlla se dobbiamo cifrare o decifrare
-		JE cifra                // Se decifra = 0, cifra
+		cmp decifra, 0          // Controlla se dobbiamo cifrare o decifrare
+		je cifra                // Se decifra = 0, cifra
 		
 		// Decifra: sottrai il valore della chiave
-		SUB AL, AH
-		JMP memorizza
+		sub al, ah
+		jmp memorizza
 		
 	cifra:
 		// Cifra: aggiungi il valore della chiave
-		ADD AL, AH
+		add al, ah
 		
 	memorizza:
-		MOV [EDI], AL           // Memorizza il risultato
-		INC ESI                 // Avanza nel testo
-		INC EDI                 // Avanza nel risultato
-		INC EDX                 // Avanza nella chiave
-		JMP ciclo_principale    // Continua il ciclo
+		mov [edi], al           // Memorizza il risultato
+		inc esi                 // Avanza nel testo
+		inc edi                 // Avanza nel risultato
+		inc edx                 // Avanza nella chiave
+		jmp ciclo_principale    // Continua il ciclo
 
 	fine:
-		MOV BYTE PTR [EDI], 0   // Aggiungi il terminatore di stringa
+		mov byte ptr [edi], 0   // Aggiungi il terminatore di stringa
 	}
 
 	// Stampa su video
